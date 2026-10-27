@@ -1,6 +1,8 @@
 import 'dotenv/config';
+import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
+import { saleTotals } from '../shared/money.js';
 
 const { ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME = 'Store Admin', STORE_NAME = 'Stockly Store' } = process.env;
 if (!ADMIN_EMAIL || !ADMIN_PASSWORD || ADMIN_PASSWORD.length < 12 || ADMIN_PASSWORD.includes('replace-with-')) {
@@ -20,6 +22,7 @@ try {
   } else {
     console.log('Admin email already exists; credentials left unchanged.');
   }
+  if (admin.role !== 'ADMIN') throw new Error('Seed email belongs to a non-admin account.');
   await prisma.storeSetting.upsert({
     where: { id: 1 }, update: {}, create: { id: 1, storeName: STORE_NAME }
   });
@@ -28,7 +31,6 @@ try {
   if (process.env.NODE_ENV === 'production') {
     console.log('Demo catalog skipped in production.');
   } else {
-    if (admin.role !== 'ADMIN') throw new Error('Seed email belongs to a non-admin account.');
     const groups = [
       ['Minuman', 'minuman'], ['Makanan Ringan', 'makanan-ringan'], ['Kebutuhan Rumah', 'kebutuhan-rumah'],
       ['Perawatan Diri', 'perawatan-diri'], ['Alat Tulis', 'alat-tulis']
@@ -79,6 +81,79 @@ try {
       created += 1;
     }
     console.log(`Demo catalog ready; ${created} products created (18 total in sample set).`);
+
+    const supplierName = 'DEMO: Mitra Grosir Fiktif';
+    let supplier = await prisma.supplier.findFirst({ where: { name: supplierName } });
+    if (!supplier) supplier = await prisma.supplier.create({ data: { name: supplierName,
+      notes: 'Data fiktif untuk demonstrasi lokal.' } });
+
+    const poNumber = 'DEMO-PO-001';
+    if (!await prisma.purchaseOrder.findUnique({ where: { poNumber } })) {
+      const product = await prisma.product.findUnique({ where: { sku: 'DEMO-RUM-001' } });
+      if (product && product.stock <= 1_000_000_000 - 6) {
+        await prisma.$transaction(async (tx) => {
+          const changed = await tx.product.updateMany({ where: { id: product.id, stock: product.stock },
+            data: { stock: { increment: 6 } } });
+          if (changed.count !== 1) throw new Error('Demo product stock changed; retry seed.');
+          const order = await tx.purchaseOrder.create({ data: { poNumber, supplierId: supplier.id,
+            supplierNameSnapshot: supplier.name, createdById: admin.id, receivedById: admin.id,
+            status: 'RECEIVED', version: 1, orderedAt: new Date(), receivedAt: new Date(), totalAmount: 64800,
+            items: { create: { productId: product.id, productNameSnapshot: product.name, skuSnapshot: product.sku,
+              quantity: 6, unitCost: 10800, lineTotal: 64800 } } } });
+          await tx.stockMovement.create({ data: { productId: product.id, userId: admin.id, type: 'IN',
+            quantityChange: 6, stockBefore: product.stock, stockAfter: product.stock + 6,
+            referenceType: 'PURCHASE_ORDER', referenceId: order.id, note: poNumber } });
+        }, { isolationLevel: 'Serializable' });
+        console.log('Fictional demo supplier and received PO ready.');
+      } else console.log('Demo PO skipped: sample product unavailable or stock at limit.');
+    } else console.log('Demo PO already exists; no stock received again.');
+
+    if (!await prisma.purchaseOrder.findUnique({ where: { poNumber: 'DEMO-PO-002' } })) {
+      const product = await prisma.product.findUnique({ where: { sku: 'DEMO-RUM-002' } });
+      if (product) {
+        await prisma.purchaseOrder.create({ data: { poNumber: 'DEMO-PO-002', supplierId: supplier.id,
+          supplierNameSnapshot: supplier.name, createdById: admin.id, status: 'ORDERED', version: 1,
+          orderedAt: new Date(), totalAmount: 44800,
+          items: { create: { productId: product.id, productNameSnapshot: product.name,
+            skuSnapshot: product.sku, quantity: 4, unitCost: 11200, lineTotal: 44800 } } } });
+        console.log('Fictional demo ordered PO ready (not received).');
+      } else console.log('Demo ordered PO skipped: sample product unavailable.');
+    } else console.log('Demo ordered PO already exists; no order created.');
+
+    const invoiceNumber = 'DEMO-INV-001';
+    if (!await prisma.sale.findUnique({ where: { invoiceNumber } })) {
+      const demoProducts = await prisma.product.findMany({ where: { sku: { in: ['DEMO-MIN-001', 'DEMO-MKN-001'] } },
+        include: { category: true } });
+      const lines = demoProducts.map((product) => ({ product, quantity: product.sku === 'DEMO-MIN-001' ? 2 : 1 }));
+      if (lines.length === 2 && lines.every(({ product, quantity }) => product.isActive && product.category.isActive && product.stock >= quantity)) {
+        await prisma.$transaction(async (tx) => {
+          const store = await tx.storeSetting.findUniqueOrThrow({ where: { id: 1 } });
+          const totals = saleTotals(lines.map(({ product, quantity }) => ({ unitPrice: product.sellingPrice, quantity })),
+            0, store.defaultTaxRate);
+          const sale = await tx.sale.create({ data: { invoiceNumber, cashierId: admin.id,
+            cashierNameSnapshot: admin.name, ...totals, taxRate: store.defaultTaxRate,
+            idempotencyKey: '00000000-0000-4000-8000-000000000091',
+            requestHash: crypto.createHash('sha256').update('fictional-local-seed-sale-v1').digest('hex'),
+            storeSnapshot: { storeName: store.storeName, address: store.address, phone: store.phone,
+              receiptFooter: store.receiptFooter, currency: store.currency },
+            items: { create: lines.map(({ product, quantity }) => ({ productId: product.id,
+              productNameSnapshot: product.name, skuSnapshot: product.sku,
+              categoryIdSnapshot: product.categoryId, categoryNameSnapshot: product.category.name,
+              quantity, unitPrice: product.sellingPrice, unitCostSnapshot: product.purchasePrice,
+              lineTotal: product.sellingPrice * quantity })) },
+            payment: { create: { amountReceived: totals.total, changeAmount: 0 } } } });
+          for (const { product, quantity } of lines) {
+            const changed = await tx.product.updateMany({ where: { id: product.id, stock: product.stock, isActive: true },
+              data: { stock: { decrement: quantity } } });
+            if (changed.count !== 1) throw new Error('Demo product stock changed; retry seed.');
+            await tx.stockMovement.create({ data: { productId: product.id, userId: admin.id, type: 'SALE',
+              quantityChange: -quantity, stockBefore: product.stock, stockAfter: product.stock - quantity,
+              referenceType: 'SALE', referenceId: sale.id, note: invoiceNumber } });
+          }
+        }, { isolationLevel: 'Serializable' });
+        console.log('Fictional demo cash sale ready.');
+      } else console.log('Demo sale skipped: sample products unavailable or stock insufficient.');
+    } else console.log('Demo sale already exists; no stock deducted again.');
   }
 } finally {
   await prisma.$disconnect();

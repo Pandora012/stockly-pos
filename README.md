@@ -1,65 +1,112 @@
 # Stockly POS
 
-Professional web-based point-of-sale and inventory management for a single physical retail store, using Indonesian Rupiah (IDR).
+A single-store point-of-sale and inventory system for Indonesian Rupiah (IDR). Cashiers need fast, reliable checkout while store owners need traceable stock changes, supplier receiving, and sales visibility. Stockly keeps those operations in one PostgreSQL-backed application.
 
-## Project status
+**Currently available for local development and demonstration. Public deployment is planned for a future release.** This is not a production-security certification or a hosted demo.
 
-**Phase 8 complete: stabilization audit and critical-flow regression coverage.** See [`docs/PHASE8_VERIFICATION.md`](docs/PHASE8_VERIFICATION.md) for audited controls and remaining limitations, [`docs/PROGRESS.md`](docs/PROGRESS.md) for status, and [`docs/HANDOFF.md`](docs/HANDOFF.md) for continuation. Deployment has not started; this audit is not a production-security certification.
+## What it does
 
-## Project references
+- **Cashier:** search or scan a USB keyboard-emulation barcode, edit a cart, hold and resume it, accept cash, print an 80mm receipt, and view own transactions.
+- **Admin:** manage categories, products, inventory adjustments, cashiers, suppliers, and purchase orders; view store-wide transactions, low-stock warnings, dashboard charts, and export four-sheet Excel reports.
+- **Integrity:** server-calculated integer-IDR totals, transactional stock movements, price/cost snapshots, checkout idempotency, one-time PO receiving, and held-cart completion guards. See [engineering decisions](docs/DECISIONS.md) and [Phase 8 audit](docs/PHASE8_VERIFICATION.md).
 
-- [`AGENTS.md`](AGENTS.md) — concise instructions for OpenCode sessions.
-- [`opencode.json`](opencode.json) — minimal project-local OpenCode configuration; does not select a model/provider.
-- [`docs/PROJECT_SPEC.md`](docs/PROJECT_SPEC.md) — product, business, architecture, security, UI, and acceptance requirements.
-- [`docs/DECISIONS.md`](docs/DECISIONS.md) — initial architecture decisions.
-- [`docs/PROGRESS.md`](docs/PROGRESS.md) — phase checklist and verification status.
-- [`docs/HANDOFF.md`](docs/HANDOFF.md) — cross-session continuation context.
+## Screenshots
 
-## Technology direction
+Actual localhost views captured from **fictional seeded data**. The Next.js development indicator may appear in some captures.
 
-Next.js App Router frontend and separate Express REST API, using JavaScript/JSX, PostgreSQL, Prisma, and npm workspaces. TypeScript is not permitted. See the project specification for the full required stack and constraints.
+| Dashboard | Cashier POS |
+| --- | --- |
+| ![Admin dashboard with seeded sales and low-stock counts](docs/screenshots/dashboard.png) | ![POS product selection and empty cart with demo catalog](docs/screenshots/pos-cashier.png) |
 
-## Local development
+| Catalog and inventory | Supplier and purchase orders | Sales reports |
+| --- | --- | --- |
+| [Products](docs/screenshots/products.png) · [Inventory](docs/screenshots/inventory.png) | [Suppliers](docs/screenshots/suppliers.png) · [Purchase orders](docs/screenshots/purchase-orders.png) | [Analytics and Excel export](docs/screenshots/sales-reports.png) |
 
-Requires Node.js 20+ and PostgreSQL 16 (Docker Compose optional). Modules cover authentication, catalog, inventory, cash checkout, held carts, history/receipts, admin dashboard, sales reports, Excel export, suppliers and purchase orders.
+Regenerate on a **dedicated demo-only database** with `npm run screenshots:local` while `npm run dev` is running. The script refuses databases containing non-demo records or additional users.
 
-1. Copy `.env.example` to `.env` and replace the database password, JWT secret (at least 32 random characters), and initial admin credentials. Keep `.env` private. `ADMIN_PASSWORD` must be at least 12 characters. If using Docker Compose, its password and the database URL must match.
-2. Use a local PostgreSQL instance configured by `DATABASE_URL`; Docker Compose (`docker compose up -d db`) is optional.
-3. Run `npm ci`, `npm run db:generate`, `npm run db:migrate`, and `npm run db:seed` from the repository root. Seeding creates the initial admin only when its email does not already exist; it does not reset existing passwords.
-4. Run `npm run dev` for web (port 3000) and API (port 4000), or `npm run dev:web` / `npm run dev:api` separately.
-5. Run `npm run test`, `npm run lint`, and `npm run build` to verify. `npm run db:migrate` uses Prisma development migrations; use `npx prisma migrate deploy` for production.
+## Technology and architecture
 
-Development seed inserts five categories and 18 **fictional demo products** with `DEMO-` SKU prefixes and initial stock movements. The UI labels demo products; do not treat these records as real store data or include them in real reporting. Re-running the seed does not overwrite existing products. The catalog pages are `/products`, `/categories` (admin), and `/inventory` (admin).
+Next.js 15 App Router, React 19, JavaScript/JSX, Tailwind CSS, React Hook Form, Zod, Recharts, Lucide React, and Inter. A separate Node.js/Express REST API uses Prisma, PostgreSQL 16, JWT in HttpOnly cookies, bcryptjs, Helmet, CORS, CSRF tokens, and ExcelJS. Vitest/Supertest cover the API and PostgreSQL; Playwright covers browser workflows. npm workspaces run the two apps together.
 
-## Cash checkout
+```text
+Browser (http://localhost:3000)
+    └─ Next.js UI ── credentials + CSRF ──> Express REST API (http://localhost:4000)
+                                          └─ Prisma ──> PostgreSQL (localhost:5432)
+```
 
-- Open `/pos` after login. Choose products, adjust quantities/IDR discount, check totals, then receive cash. Backend recalculates prices, tax, stock and change; stale totals require explicit cart refresh before payment.
-- Open `/transactions` to view history and print/reprint the 80mm receipt. Cashiers see only their own transactions; admins see the store history. Date filters use UTC days.
-- If checkout loses its connection, use **Periksa pembayaran tertunda** to retry the saved request. Do not start another sale or clear the pending request until the previous outcome is known. Pending checkout recovery survives a reload in the same browser tab; it is distinct from deliberately holding a cart.
-- USB barcode scanners in keyboard mode: focus the POS search, scan a numeric barcode, then Enter adds the active product. Repeated scans increase its quantity up to available stock. Unknown or inactive codes are reported without revealing inactive catalog entries; zero-stock products cannot be added. Camera scanning is not included.
-- POS shortcuts: **F2** search, **F4** checkout when valid, **F6** hold the current cart, **F7** open held carts, and **F8** transactions outside form fields/dialogs. **Escape** closes dialogs or clears search/cancels a quantity edit. Shortcuts do not override typing or modified browser key combinations. See [`docs/PHASE6_VERIFICATION.md`](docs/PHASE6_VERIFICATION.md) and [`docs/PHASE7_VERIFICATION.md`](docs/PHASE7_VERIFICATION.md).
-- Critical browser tests: `npx playwright install chromium`, then `npm run test:e2e`. Uses local PostgreSQL and dedicated ports 3100/4100; test fixtures are cleaned up. Do not run these tests on production. See [`docs/PHASE3_VERIFICATION.md`](docs/PHASE3_VERIFICATION.md).
+The API owns authorization, validation, IDR calculations, checkout, stock transactions, purchasing, and reporting. The browser never receives the JWT value. Product/category/stock-movement, sale/item/payment, supplier/purchase-order/item, and held-cart/item tables have foreign keys and constraints; migrations live in `prisma/migrations/`. One store is represented by `StoreSetting`.
 
-## Hold and resume
+| Path | Purpose |
+| --- | --- |
+| `apps/web/app`, `apps/web/components` | Next.js pages and operational UI |
+| `apps/api/src`, `apps/api/test` | Express routes and unit/integration tests |
+| `prisma/`, `shared/` | PostgreSQL schema, local seed, integer-money/reporting helpers |
+| `tests/e2e/`, `docs/` | Browser tests, decisions, verification, demo and portfolio materials |
+| `scripts/capture-local-screenshots.js` | Demo-only screenshot capture |
 
-- On `/pos`, enter a label and choose **Tahan keranjang** or F6. The cart is stored in PostgreSQL without reserving stock or creating a sale/payment. If saving returns an uncertain response, inspect the held-cart list before saving again.
-- **Keranjang ditahan** or F7 shows your active carts, updated times, and options to resume or discard. Cashiers see only their own. Admins may view all through the API but cannot resume/discard someone else's cart.
-- Resuming claims a cart for one session for 30 minutes. Review changed prices, inactive goods and reduced stock. Exclude unavailable goods or reduce quantities, then explicitly confirm the revised cart before paying. The old discount is preserved when valid, otherwise reset to zero with a notice. Another session cannot pay the same held cart.
-- Checkout uses the normal cash-payment path and its pending-payment recovery. If prices/stock change again or the claim expires, reopen the same held cart and review again. After an uncertain payment, check pending payment/history before discarding. See [`docs/PHASE7_VERIFICATION.md`](docs/PHASE7_VERIFICATION.md).
+## Requirements and PostgreSQL
 
-## Admin reporting
+- Node.js **20+**, npm, and PostgreSQL **16** locally, or Docker Desktop with Compose **for the database only**.
+- A free `3000` (web), `4000` (API), and `5432` (database). Playwright uses separate `3100`/`4100` so it can run beside the dev servers.
+- Chromium for browser tests/screenshots: `npx playwright install chromium`.
 
-- `/dashboard` shows real store metrics, seven-day net sales, top five products and recent transactions. `/reports` offers daily/monthly summaries, categories, product rankings and a four-sheet XLSX download. All report/export endpoints are admin-only; cashiers keep POS and own-history access.
-- Reports use **Asia/Jakarta** local days. Gross sales are before discounts; net sales exclude discounts and tax. Gross profit estimate deducts historical item costs from net sales, **not operating expenses**; it is not net profit.
-- Date ranges: at most 366 days for reports, 93 days for Excel. Workbook limits: 10,000 transactions/sold products/current stock rows; five exports per admin per minute. Over-limit exports return an error instead of partial data. Stock Report represents current stock, not historical closing stock.
-- Report categories are snapshotted on new sales. Earlier sales were backfilled from the catalog when Phase 4 was migrated because their original category was not stored. See [`docs/DECISIONS.md`](docs/DECISIONS.md) and [`docs/PHASE4_VERIFICATION.md`](docs/PHASE4_VERIFICATION.md).
+**Option A, existing local PostgreSQL:** create a local `stockly` database and login role, grant that role migration/DDL rights on the database/schema, and put its matching URL in `.env`. For example, in `psql` as a local PostgreSQL administrator:
 
-## Suppliers and restocking
+```sql
+CREATE ROLE stockly LOGIN PASSWORD '<your-local-database-password>';
+CREATE DATABASE stockly OWNER stockly;
+```
 
-- Admins manage contacts, activation and purchase history at `/suppliers`. Deactivation preserves records and history.
-- Open `/purchases/new` to build a multi-product PO, then use `/purchases/[id]` to edit its draft, mark it ordered, and confirm full-order receipt. Only drafts are editable; saving or ordering does not change stock.
-- Receiving atomically adds stock, records linked IN movements, and updates the current product purchase price to the PO unit cost. PO costs and existing sales cost snapshots remain historical; this is last-purchase cost, not weighted-average costing.
-- If a receive response is lost, retry the **same PO**. Already-received orders return their result without restocking again. Draft creation has no retry key: check purchase history before submitting a new draft after an uncertain save.
-- No partial shipments, supplier payments, accounts payable or multi-warehouse features are included. See [`docs/PHASE5_VERIFICATION.md`](docs/PHASE5_VERIFICATION.md).
+**Option B, optional Compose database:** set `POSTGRES_PASSWORD` in the ignored `.env` file, then `docker compose up -d db`. `compose.yaml` binds PostgreSQL to `127.0.0.1:5432`; it does **not** deploy the web/API. Existing Compose volumes retain their original password; changing `.env` alone will not rotate a previously initialized database password.
 
-The browser calls the Express API directly using `NEXT_PUBLIC_API_URL`. Set `WEB_ORIGIN` to the exact browser origin. In production, use HTTPS, `COOKIE_SAME_SITE=lax` for same-site origins, or `none` only for cross-site HTTPS with an appropriate CSRF/CORS policy. JWT cookies are HttpOnly and Secure in production. The API controls access; frontend route guards are for navigation only.
+## Install and run on Windows
+
+Open **PowerShell or the VS Code PowerShell terminal** in the repository root:
+
+```powershell
+Copy-Item .env.example .env
+# Edit .env privately: set matching PostgreSQL credentials, a random JWT_SECRET,
+# and a unique ADMIN_EMAIL / ADMIN_PASSWORD. Never commit .env.
+npm ci
+docker compose up -d db   # optional: skip when local PostgreSQL is already running
+npm run db:generate
+npm run db:migrate
+npm run db:seed
+npm run dev
+```
+
+Open `http://localhost:3000`; the API listens on `http://localhost:4000`. `npm run dev` starts both with `concurrently`; `npm run dev:web` and `npm run dev:api` are available for separate terminals. On Windows Bash harnesses missing System32 in PATH, prefix the command with `PATH="/c/Windows/System32:$PATH"`; normal PowerShell has `cmd.exe` on PATH.
+
+`.env.example` documents `DATABASE_URL`, `POSTGRES_PASSWORD` (Compose only), `JWT_SECRET` (32+ random characters), `PORT=4000`, `WEB_ORIGIN=http://localhost:3000`, `NEXT_PUBLIC_API_URL=http://localhost:4000`, `COOKIE_SAME_SITE=lax`, and initial admin/store fields. The browser needs only `NEXT_PUBLIC_API_URL`; never put a private password or JWT secret in `NEXT_PUBLIC_*`. Cookies are HttpOnly for the JWT and not Secure over local HTTP; HTTPS production cookies require a separate deployment review. The readable CSRF cookie supplies a signed header for mutations. API CORS accepts the exact `WEB_ORIGIN`.
+
+`npm run db:migrate` applies **development** migrations to PostgreSQL; `npx prisma migrate status` checks the six existing migrations. `npm run db:seed` creates the initial admin only if its email is absent, never resets existing credentials/settings, and inserts clearly labeled fictional categories/products, stock movements, one supplier, a received PO (`DEMO-PO-001`), an ordered but unreceived PO (`DEMO-PO-002`), and one cash sale only outside production. Re-running skips existing demo identities and does not receive/deduct twice. Demo sale totals use the current store tax setting; if demo goods are inactive/out of stock, it skips the sale rather than altering other data. Set the admin password yourself in `.env`; the project publishes **no fixed demo password**. Create a Cashier on `/users` as Admin and set a separate local password for the walkthrough.
+
+## Tests and local checks
+
+```powershell
+npm test                  # Vitest + real-PostgreSQL API/integration tests
+npm run lint
+npm run build             # Next.js production compilation, not deployment
+npm run test:e2e          # Playwright; runs its own 3100/4100 servers and test fixtures
+npx prisma migrate status
+```
+
+Run tests against a disposable **local development** database, never real store data: Playwright creates and deletes fixture records. The latest verified results and environment caveats are in [docs/PROGRESS.md](docs/PROGRESS.md) and [docs/HANDOFF.md](docs/HANDOFF.md).
+
+## REST API at a glance
+
+All routes start with `/api`. `auth/csrf`, `auth/login`, `auth/me`, and `auth/logout` handle sessions. `users`, `categories`, `products`, and `inventory/adjustments` handle access and catalog/stock. `sales`, `sales/:id/receipt`, and `held-carts` cover checkout/history/recovery. `suppliers` and `purchases/:id/receive` handle procurement. `reports/overview`, `reports/sales`, `reports/products`, and `reports/export` drive dashboard and XLSX. Admin mutations and store-wide reports are backend-gated; cashiers access only their own history/held carts. Mutations require CSRF headers. See route definitions in `apps/api/src/` for exact payloads.
+
+## Demo, challenges, and limits
+
+Follow the [localhost demo walkthrough](docs/DEMO_GUIDE.md) from Admin dashboard through product/stock, supplier receiving, Cashier barcode/hold/checkout/receipt, then sales analytics and Excel. [Portfolio notes](docs/PORTFOLIO.md) summarize the engineering work.
+
+Key challenges include preventing last-unit overselling, preserving historical prices and costs, handling lost checkout/receiving responses without duplicate writes, and revalidating held carts without reserving stock. Limits: one store, cash only, no partial receiving or payment gateway, no camera scanner, browser printing requires an actual printer for physical verification, and initial hold/draft/adjustment creation lacks a retry identity. Reports use Asia/Jakarta days while transaction-history filters use UTC days. The in-memory rate limiter is not shared across replicas; local verification is not a penetration test or proof of production readiness. Future work, **only if separately authorized**, includes deployment hardening, load/accessibility testing, backup/restore, and scale-driven pagination/index changes.
+
+### Troubleshooting
+
+- **Database unavailable:** verify PostgreSQL/Compose is running on `5432`, `DATABASE_URL` matches its role/password/database, and `npx prisma migrate status` connects. Do not delete an existing volume to fix a password mismatch; use the existing database credentials or change the role password deliberately.
+- **API refuses to start:** supply a non-placeholder `JWT_SECRET` of 32+ characters and exact `WEB_ORIGIN`. Use `COOKIE_SAME_SITE=lax` for local HTTP, not `none`.
+- **Login/CSRF/CORS fails:** use `localhost` consistently (not mixed with `127.0.0.1`), verify `NEXT_PUBLIC_API_URL=http://localhost:4000` and `WEB_ORIGIN=http://localhost:3000`, restart Next.js after changing public variables, and check browser cookies/network responses.
+- **Port conflict:** stop the specific process occupying `3000`, `4000`, or `5432` before starting; Playwright additionally needs `3100`/`4100`.
+- **Prisma warning:** Prisma 6 warns that the `package.json#prisma` seed configuration will be removed in Prisma 7; the current Prisma 6 workflow remains functional. Run `npm run db:generate` after a schema/client mismatch.

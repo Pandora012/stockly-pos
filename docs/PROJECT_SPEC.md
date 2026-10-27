@@ -70,7 +70,7 @@ Use an npm-workspaces monorepo with a Next.js frontend and a separately run Expr
 7. **Phase 6 — Barcode scanner and keyboard shortcuts.**
 8. **Phase 7 — Hold and resume cart.**
 9. **Phase 8 — Security audit, testing, and UI refinement.**
-10. **Phase 9 — Deployment and portfolio documentation.**
+10. **Phase 9 — Local readiness and portfolio documentation.** Public deployment is deferred until separately authorized.
 
 Only the currently authorized phase may be implemented. Phase 0 must not implement application features or install dependencies.
 
