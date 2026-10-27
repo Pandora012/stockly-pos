@@ -120,6 +120,19 @@ form .primary-button { margin-top: 14px; }
 .totals dd { margin: 0; text-align: right; }
 .totals .grand-total { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; font-weight: 700; font-size: 1.25rem; }
 .checkout-button { width: 100%; margin-bottom: 10px; }
+.held-panel { margin-top: 20px; }
+.held-heading { justify-content: space-between; align-items: center; flex-wrap: wrap; }
+.held-heading h2 { margin: 0; }
+.held-list { padding: 0; margin: 12px 0 18px; list-style: none; }
+.held-list li { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.held-list li > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.held-list .row-actions { flex-wrap: wrap; }
+.held-review { width: min(800px, calc(100% - 28px)); }
+.held-review td { white-space: normal; vertical-align: top; min-width: 145px; }
+.held-choice { display: flex; align-items: start; gap: 8px; margin: 0; }
+.held-choice input { width: 18px; height: 18px; margin: 3px 0 0; flex: 0 0 18px; }
+.held-choice span { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 660px) { .held-list li { align-items: start; flex-direction: column; } }
 .amount-due { display: grid; gap: 8px; margin: 15px 0; }
 .amount-due strong { font-size: 1.9rem; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
 .quick-cash { display: flex; gap: 8px; flex-wrap: wrap; }

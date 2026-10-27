@@ -25,6 +25,8 @@ test.afterEach(async () => {
     await db.payment.deleteMany({ where: { sale: sales } });
     await db.saleItem.deleteMany({ where: { sale: sales } });
     await db.sale.deleteMany({ where: sales });
+    await db.heldCartItem.deleteMany({ where: { heldCart: { cashierId: user.id } } });
+    await db.heldCart.deleteMany({ where: { cashierId: user.id } });
     await db.product.deleteMany({ where: { categoryId: category.id } });
     await db.category.delete({ where: { id: category.id } });
     await db.user.delete({ where: { id: user.id } });
@@ -198,7 +200,11 @@ test('scanner Enter and POS shortcuts remain safe across rapid input and navigat
   await page.keyboard.press('F2'); await expect(page.getByLabel('Diskon (IDR)')).toBeFocused();
   await page.keyboard.press('F8'); await expect(page).toHaveURL(/\/pos$/);
   await page.locator('body').click({ position: { x: 10, y: 10 } });
-  await page.keyboard.press('F6'); await page.keyboard.press('F7'); await expect(page).toHaveURL(/\/pos$/);
+  await page.keyboard.press('F6'); await expect(page.getByRole('dialog', { name: 'Tahan keranjang' })).toBeVisible();
+  await page.keyboard.press('F7'); await expect(page.getByRole('dialog', { name: 'Tahan keranjang' })).toBeVisible();
+  await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.locator('body').click({ position: { x: 10, y: 10 } });
+  await page.keyboard.press('F7'); await expect(page.getByRole('region', { name: 'Keranjang ditahan' }).getByRole('button', { name: 'Tutup daftar' })).toBeVisible();
   await page.keyboard.press('Control+F4'); await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.keyboard.press('F4');
   const dialog = page.getByRole('dialog'); await expect(dialog).toBeVisible();
@@ -213,4 +219,95 @@ test('scanner Enter and POS shortcuts remain safe across rapid input and navigat
   expect(await page.evaluate(() => window.__posShortcutListeners())).toBe(1);
   await page.keyboard.press('F2'); await expect(page.getByLabel('Cari nama, SKU, atau pindai barcode')).toBeFocused();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('held cart survives reload, requires review, and completes through the existing cash checkout', async ({ page }) => {
+  const inactive = await db.product.create({ data: { name: 'Held inactive E2E', sku: `HELD-INACTIVE-${crypto.randomUUID()}`,
+    categoryId: category.id, purchasePrice: 1000, sellingPrice: 7000, stock: 3 } });
+  products.push(inactive);
+  await login(page);
+  await page.getByRole('button', { name: 'Tambah E2E product 1', exact: true }).click();
+  await page.getByRole('button', { name: 'Tambah E2E product 2', exact: true }).click();
+  await page.getByRole('button', { name: `Tambah ${inactive.name}`, exact: true }).click();
+  await page.getByLabel(`Jumlah ${products[1].name}`, { exact: true }).fill('3');
+  await page.getByLabel('Diskon (IDR)').fill('1000');
+  await page.getByRole('button', { name: 'Tahan keranjang · F6' }).click();
+  await expect(page.getByRole('dialog', { name: 'Tahan keranjang' })).toBeVisible();
+  await page.getByLabel('Label keranjang').fill('Pelanggan kembali nanti');
+  await page.getByRole('button', { name: 'Simpan keranjang' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Stok tidak dicadangkan' })).toBeVisible();
+  const held = await db.heldCart.findFirstOrThrow({ where: { cashierId: user.id }, include: { items: true } });
+  expect(held.status).toBe('HELD'); expect(held.discount).toBe(1000); expect(held.items).toHaveLength(3);
+  expect(await db.sale.count({ where: { cashierId: user.id } })).toBe(0);
+  expect((await db.product.findUniqueOrThrow({ where: { id: products[0].id } })).stock).toBe(10);
+  await db.product.update({ where: { id: products[0].id }, data: { sellingPrice: 6000 } });
+  await db.product.update({ where: { id: products[1].id }, data: { stock: 1 } });
+  await db.product.update({ where: { id: inactive.id }, data: { isActive: false } });
+  await page.reload();
+  await page.getByRole('button', { name: 'Buka daftar · F7' }).click();
+  await expect(page.getByText('Pelanggan kembali nanti')).toBeVisible();
+  await page.getByRole('button', { name: 'Lanjutkan / periksa' }).click();
+  const review = page.getByRole('dialog', { name: 'Periksa sebelum melanjutkan' });
+  await expect(review).toBeVisible();
+  await expect(review.getByText('Harga berubah')).toBeVisible();
+  await expect(review.getByText('Stok berkurang')).toBeVisible();
+  await expect(review.getByText('Nonaktif: tidak dapat dibayar')).toBeVisible();
+  await expect(review.getByLabel(`Jumlah ${products[1].name}`, { exact: true })).toHaveValue('1');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await review.getByRole('button', { name: 'Gunakan keranjang yang diperiksa' }).click();
+  await expect(page.getByLabel(`Jumlah ${products[1].name}`, { exact: true })).toHaveValue('1');
+  await expect(page.getByRole('button', { name: 'Tambah E2E product 1', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Bayar tunai' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Bayar tunai' }).click();
+  await page.getByRole('button', { name: 'Konfirmasi pembayaran' }).click();
+  await expect(page.getByRole('heading', { name: 'Pembayaran tersimpan' })).toBeVisible();
+  const sale = await db.sale.findFirstOrThrow({ where: { heldCartId: held.id }, include: { items: true } });
+  expect(sale.items).toHaveLength(2); expect(sale.discount).toBe(1000);
+  expect(sale.items.find((item) => item.productId === products[0].id).unitPrice).toBe(6000);
+  expect((await db.heldCart.findUniqueOrThrow({ where: { id: held.id } })).status).toBe('COMPLETED');
+  expect((await db.product.findUniqueOrThrow({ where: { id: products[0].id } })).stock).toBe(9);
+});
+
+test('discarded held cart cannot be resumed', async ({ page }) => {
+  await login(page); await page.getByRole('button', { name: 'Tambah E2E product 1', exact: true }).click();
+  await page.getByRole('button', { name: 'Tahan keranjang · F6' }).click();
+  await page.getByLabel('Label keranjang').fill('Dibatalkan');
+  await page.getByRole('button', { name: 'Simpan keranjang' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Stok tidak dicadangkan' })).toBeVisible();
+  const held = await db.heldCart.findFirstOrThrow({ where: { cashierId: user.id } });
+  await page.getByRole('button', { name: 'Buang', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Buang keranjang?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Ya, buang' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Keranjang dibuang' })).toBeVisible();
+  expect((await db.heldCart.findUniqueOrThrow({ where: { id: held.id } })).status).toBe('DISCARDED');
+  expect(await db.sale.count({ where: { cashierId: user.id } })).toBe(0);
+});
+
+test('lost held-cart payment response replays one completed sale after reload', async ({ page }) => {
+  await login(page);
+  await page.getByRole('button', { name: 'Tambah E2E product 1', exact: true }).click();
+  await page.getByRole('button', { name: 'Tahan keranjang · F6' }).click();
+  await page.getByLabel('Label keranjang').fill('Bayar nanti');
+  await page.getByRole('button', { name: 'Simpan keranjang' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Stok tidak dicadangkan' })).toBeVisible();
+  const held = await db.heldCart.findFirstOrThrow({ where: { cashierId: user.id } });
+  await page.getByRole('button', { name: 'Lanjutkan / periksa' }).click();
+  await page.getByRole('dialog', { name: 'Periksa sebelum melanjutkan' }).getByRole('button', { name: 'Gunakan keranjang yang diperiksa' }).click();
+  let dropped = false;
+  await page.route('**/api/sales', async (route) => {
+    if (route.request().method() === 'POST' && !dropped) {
+      dropped = true; await route.fetch(); await route.abort('failed');
+    } else await route.continue();
+  });
+  await page.getByRole('button', { name: 'Bayar tunai' }).click();
+  await page.getByRole('button', { name: 'Konfirmasi pembayaran' }).click();
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Tidak dapat terhubung');
+  await page.reload();
+  await page.getByRole('button', { name: 'Periksa pembayaran tertunda' }).click();
+  await page.getByRole('button', { name: 'Periksa / ulangi pembayaran', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Pembayaran tersimpan' })).toBeVisible();
+  expect(await db.sale.count({ where: { heldCartId: held.id } })).toBe(1);
+  expect((await db.heldCart.findUniqueOrThrow({ where: { id: held.id } })).status).toBe('COMPLETED');
+  expect((await db.product.findUniqueOrThrow({ where: { id: products[0].id } })).stock).toBe(9);
 });

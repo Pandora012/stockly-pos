@@ -4,7 +4,7 @@ Professional web-based point-of-sale and inventory management for a single physi
 
 ## Project status
 
-**Phase 6 complete: USB barcode scanning and keyboard shortcuts.** See [`docs/PROGRESS.md`](docs/PROGRESS.md) for verification/status and [`docs/HANDOFF.md`](docs/HANDOFF.md) for continuation. Phase 7 has not started.
+**Phase 8 complete: stabilization audit and critical-flow regression coverage.** See [`docs/PHASE8_VERIFICATION.md`](docs/PHASE8_VERIFICATION.md) for audited controls and remaining limitations, [`docs/PROGRESS.md`](docs/PROGRESS.md) for status, and [`docs/HANDOFF.md`](docs/HANDOFF.md) for continuation. Deployment has not started; this audit is not a production-security certification.
 
 ## Project references
 
@@ -21,7 +21,7 @@ Next.js App Router frontend and separate Express REST API, using JavaScript/JSX,
 
 ## Local development
 
-Requires Node.js 20+ and PostgreSQL 16 (Docker Compose optional). Modules cover authentication, catalog, inventory, cash checkout, history/receipts, admin dashboard, sales reports, Excel export, suppliers and purchase orders.
+Requires Node.js 20+ and PostgreSQL 16 (Docker Compose optional). Modules cover authentication, catalog, inventory, cash checkout, held carts, history/receipts, admin dashboard, sales reports, Excel export, suppliers and purchase orders.
 
 1. Copy `.env.example` to `.env` and replace the database password, JWT secret (at least 32 random characters), and initial admin credentials. Keep `.env` private. `ADMIN_PASSWORD` must be at least 12 characters. If using Docker Compose, its password and the database URL must match.
 2. Use a local PostgreSQL instance configured by `DATABASE_URL`; Docker Compose (`docker compose up -d db`) is optional.
@@ -35,10 +35,17 @@ Development seed inserts five categories and 18 **fictional demo products** with
 
 - Open `/pos` after login. Choose products, adjust quantities/IDR discount, check totals, then receive cash. Backend recalculates prices, tax, stock and change; stale totals require explicit cart refresh before payment.
 - Open `/transactions` to view history and print/reprint the 80mm receipt. Cashiers see only their own transactions; admins see the store history. Date filters use UTC days.
-- If checkout loses its connection, use **Periksa pembayaran tertunda** to retry the saved request. Do not start another sale or clear the pending request until the previous outcome is known. Pending checkout recovery survives a reload in the same browser tab, but is not a held-cart feature.
+- If checkout loses its connection, use **Periksa pembayaran tertunda** to retry the saved request. Do not start another sale or clear the pending request until the previous outcome is known. Pending checkout recovery survives a reload in the same browser tab; it is distinct from deliberately holding a cart.
 - USB barcode scanners in keyboard mode: focus the POS search, scan a numeric barcode, then Enter adds the active product. Repeated scans increase its quantity up to available stock. Unknown or inactive codes are reported without revealing inactive catalog entries; zero-stock products cannot be added. Camera scanning is not included.
-- POS shortcuts: **F2** search, **F4** checkout when the cart is valid, **F8** transactions from the application outside form fields/dialogs. **Escape** closes checkout or clears search/cancels a quantity edit. **F6/F7** are reserved for Phase 7 and currently do nothing. Shortcuts do not override typing or modified browser key combinations. See [`docs/PHASE6_VERIFICATION.md`](docs/PHASE6_VERIFICATION.md).
+- POS shortcuts: **F2** search, **F4** checkout when valid, **F6** hold the current cart, **F7** open held carts, and **F8** transactions outside form fields/dialogs. **Escape** closes dialogs or clears search/cancels a quantity edit. Shortcuts do not override typing or modified browser key combinations. See [`docs/PHASE6_VERIFICATION.md`](docs/PHASE6_VERIFICATION.md) and [`docs/PHASE7_VERIFICATION.md`](docs/PHASE7_VERIFICATION.md).
 - Critical browser tests: `npx playwright install chromium`, then `npm run test:e2e`. Uses local PostgreSQL and dedicated ports 3100/4100; test fixtures are cleaned up. Do not run these tests on production. See [`docs/PHASE3_VERIFICATION.md`](docs/PHASE3_VERIFICATION.md).
+
+## Hold and resume
+
+- On `/pos`, enter a label and choose **Tahan keranjang** or F6. The cart is stored in PostgreSQL without reserving stock or creating a sale/payment. If saving returns an uncertain response, inspect the held-cart list before saving again.
+- **Keranjang ditahan** or F7 shows your active carts, updated times, and options to resume or discard. Cashiers see only their own. Admins may view all through the API but cannot resume/discard someone else's cart.
+- Resuming claims a cart for one session for 30 minutes. Review changed prices, inactive goods and reduced stock. Exclude unavailable goods or reduce quantities, then explicitly confirm the revised cart before paying. The old discount is preserved when valid, otherwise reset to zero with a notice. Another session cannot pay the same held cart.
+- Checkout uses the normal cash-payment path and its pending-payment recovery. If prices/stock change again or the claim expires, reopen the same held cart and review again. After an uncertain payment, check pending payment/history before discarding. See [`docs/PHASE7_VERIFICATION.md`](docs/PHASE7_VERIFICATION.md).
 
 ## Admin reporting
 

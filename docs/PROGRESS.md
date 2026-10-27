@@ -47,23 +47,23 @@ Statuses: `in progress`, `not started`, `complete` (use complete only after that
 ## Phase 6 — Barcode scanner and keyboard shortcuts
 - **Status:** complete
 - **Completed:** Exact barcode filter on existing product list endpoint, preserving cashier visibility; Enter-based keyboard-emulation scanner lookup with serialized scans, quantity increments, stock limits, unknown/inactive/out-of-stock feedback and checkout lock while lookup is pending. POS-only F2 search focus and F4 checkout; app-level F8 transactions; form/dialog guards, modifier/repeat guards and listener cleanup. F6/F7 shown as reserved and left inactive. Cart stock display and editable quantity handling improved; payment dialog focuses cash input and then receipt link, with focus restored to search on close. No camera scanning or Phase 7 cart-hold behavior.
-- **Remaining:** None for Phase 6. Phase 7 not started; requires explicit authorization.
+- **Remaining:** None for Phase 6.
 - **Verification:** Focused PostgreSQL catalog test passed, including exact barcode and cashier/inactive visibility. Focused Playwright scanner/shortcut scenario passed, covering rapid/repeated scans, stock cap, errors, shortcut contexts and listener counts across navigation. Full `npm test` 33/33, `npm run lint`, production `npm run build`, and full Playwright regression 8/8 passed. See `docs/PHASE6_VERIFICATION.md`.
 - **Known blockers:** None. Cashier sees the same non-disclosing message for an unknown barcode and an inactive product. Existing non-blocking Prisma 6 config warning remains.
 
 ## Phase 7 — Hold and resume cart
-- **Status:** not started
-- **Completed:** None.
-- **Remaining:** All phase work.
-- **Verification:** Not run.
-- **Known blockers:** None known.
+- **Status:** complete
+- **Completed:** PostgreSQL HeldCart/HeldCartItem schema, status/lease constraints, sale link and applied migration. Authenticated owner-scoped hold/list/detail/resume/discard APIs with admin read access. Hold snapshots current prices without reserving inventory; resume claims one session and returns current price/stock/activity review. Existing serializable cash checkout conditionally completes the claimed cart in the same sale transaction, with unique sale-per-cart and existing sale-key replay. POS label/hold/discard/review dialogs, count/updated times, explicit re-confirmation, F6/F7, and uncertain-payment recovery. Successful logins no longer consume the failed-login rate limit; failed attempts still cap at ten per 15 minutes.
+- **Remaining:** None for Phase 7. Phase 8 not started; requires explicit authorization.
+- **Verification:** `npm run db:migrate` applied `20261031000000_held_carts` and generated Prisma Client; `npx prisma migrate status` reports six up to date. Focused held-cart PostgreSQL integration tests 8/8 and auth rate-limit test passed; latest full `npm test` **42/42**. `npm run lint`, `npm run build` and full Playwright **11/11** passed. E2E covers persistence after reload, review of changed price/stock/inactive products, discard confirmation, F6/F7, completed sale and dropped-response replay. Details: `docs/PHASE7_VERIFICATION.md`.
+- **Known blockers:** None. A resume claim expires after 30 minutes and must be re-reviewed before checkout; an uncertain initial hold response is not automatically idempotent. Non-blocking Prisma 6 config warning remains.
 
 ## Phase 8 — Security audit, testing, and UI refinement
-- **Status:** not started
-- **Completed:** None.
-- **Remaining:** All phase work.
-- **Verification:** Not run.
-- **Known blockers:** None known.
+- **Status:** complete
+- **Completed:** Audited auth/session/cookie/CSRF/CORS, every API mutation's authentication/role/ownership boundary, server-side IDR/stock/checkout/PO/held-cart invariants, frontend operational states and responsive/print/export flows, query bounds/indexes and client bundle inputs. Reproduced an unauthorized catalog cost-price disclosure through PostgreSQL integration tests, then restricted cashier product list/detail fields while preserving admin fields. Added real-browser admin product creation, invalid and valid stock adjustment, low-stock and cashier-denial coverage; expanded auth security regression tests for expiration, production cookie flags, origin/CSRF, inactive users and mutation route matrix. No deployment or unrelated features.
+- **Remaining:** No Phase 8 implementation tasks. Operational limitations and untested production environment controls are documented in `docs/PHASE8_VERIFICATION.md`; Phase 9 requires explicit authorization.
+- **Verification:** Focused PostgreSQL catalog and auth integration tests passed after the fix; focused Playwright catalog 2/2. Final `npm test` **43/43** across eight suites, `npm run lint`, `npm run build`, full Playwright **13/13**, `npx prisma migrate status` (six migrations current), and static client-bundle marker search passed. See `docs/PHASE8_VERIFICATION.md`.
+- **Known blockers:** None for the local Phase 8 scope. This is not evidence of production security: HTTPS/proxy configuration, distributed rate-limit persistence, load testing and external security assessment remain outside the tested environment.
 
 ## Phase 9 — Deployment and portfolio documentation
 - **Status:** not started

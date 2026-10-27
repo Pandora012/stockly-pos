@@ -34,6 +34,9 @@ const movementQuery = z.object({ ...pageInput, productId: id.optional(),
   from: z.string().date().optional(), to: z.string().date().optional() }).strict().refine(
   (value) => !value.from || !value.to || value.from <= value.to, { message: 'Invalid date range' }
 );
+const cashierProduct = { id: true, categoryId: true, name: true, sku: true, barcode: true,
+  sellingPrice: true, stock: true, minimumStock: true, isActive: true,
+  category: { select: { id: true, name: true, isActive: true } } };
 
 export class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -101,7 +104,9 @@ export function catalogRouter(db, authenticate, adminOnly) {
     const query = productQuery.parse(req.query);
     const where = stockWhere(db, query, req.user.role === 'ADMIN');
     const [items, total] = await Promise.all([
-      db.product.findMany({ where, include: { category: { select: { id: true, name: true, isActive: true } } },
+      db.product.findMany({ where, ...(req.user.role === 'ADMIN'
+        ? { include: { category: { select: { id: true, name: true, isActive: true } } } }
+        : { select: cashierProduct }),
         orderBy: [{ name: 'asc' }, { id: 'asc' }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
       db.product.count({ where })
     ]);
@@ -111,7 +116,9 @@ export function catalogRouter(db, authenticate, adminOnly) {
     const productId = id.parse(req.params.id);
     const product = await db.product.findFirst({ where: { id: productId,
       ...(req.user.role !== 'ADMIN' ? { isActive: true, category: { isActive: true } } : {})
-    }, include: { category: { select: { id: true, name: true, isActive: true } } } });
+    }, ...(req.user.role === 'ADMIN'
+      ? { include: { category: { select: { id: true, name: true, isActive: true } } } }
+      : { select: cashierProduct }) });
     if (!product) throw new HttpError(404, 'Product not found');
     res.json({ product });
   }));

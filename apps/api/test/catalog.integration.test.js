@@ -72,6 +72,10 @@ integration('catalog and stock controls against PostgreSQL', async () => {
     expect(nextPage.body.items[0].id).not.toBe(found.body.items[0].id);
     expect((await admin.get('/api/products').query({ q: barcode })).body.total).toBe(1);
     expect((await cashier.get('/api/products').query({ barcode, pageSize: 1 })).body.items[0].id).toBe(productId);
+    const cashierList = await cashier.get('/api/products').query({ barcode });
+    expect(cashierList.body.items[0]).not.toHaveProperty('purchasePrice');
+    expect((await cashier.get(`/api/products/${productId}`)).body.product).not.toHaveProperty('purchasePrice');
+    expect((await admin.get(`/api/products/${productId}`)).body.product.purchasePrice).toBe(1000);
     expect((await cashier.get('/api/products').query({ barcode: `${barcode}0` })).body.total).toBe(0);
     expect((await cashier.get('/api/products').query({ barcode: 'invalid' })).status).toBe(400);
     expect((await admin.get('/api/products').query({ categoryId, lowStock: true })).body.total).toBe(1);

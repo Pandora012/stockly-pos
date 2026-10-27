@@ -11,6 +11,7 @@ import { catalogRouter } from './catalog.js';
 import { salesRouter } from './sales.js';
 import { reportsRouter } from './reports.js';
 import { purchasingRouter } from './purchases.js';
+import { heldCartsRouter } from './held-carts.js';
 
 const safeUser = { id: true, name: true, email: true, role: true, isActive: true, createdAt: true, updatedAt: true };
 const credentials = z.object({ email: z.string().email().max(255), password: z.string().min(1) }).strict();
@@ -99,7 +100,8 @@ export function createApp(db, config) {
   const adminOnly = (req, res, next) => req.user.role === 'ADMIN'
     ? next() : res.status(403).json({ error: 'Admin access required' });
 
-  const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-7', legacyHeaders: false });
+  const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, skipSuccessfulRequests: true,
+    standardHeaders: 'draft-7', legacyHeaders: false });
   app.post('/api/auth/login', loginLimiter, async (req, res, next) => {
     try {
       const input = credentials.parse(req.body);
@@ -156,6 +158,7 @@ export function createApp(db, config) {
   });
 
   app.use('/api', purchasingRouter(db, authenticate, adminOnly));
+  app.use('/api/held-carts', heldCartsRouter(db, authenticate));
   app.use('/api/reports', reportsRouter(db, authenticate, adminOnly));
   app.use('/api/sales', salesRouter(db, authenticate));
   app.use('/api', catalogRouter(db, authenticate, adminOnly));

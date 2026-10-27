@@ -8,7 +8,7 @@ const secret = 'a-development-test-secret-at-least-32-characters';
 const adminId = '7fb86ee3-4cec-4f38-a88b-e5ccc9679dcb';
 const cashierId = '69b4e79b-4685-4245-a3c7-bf5e322fd779';
 
-function fixture() {
+function fixture(config = {}) {
   const users = [
     { id: adminId, name: 'Admin', email: 'admin@local.test', passwordHash: bcrypt.hashSync('correct-password', 4), role: 'ADMIN', isActive: true, sessionVersion: 0 },
     { id: cashierId, name: 'Cashier', email: 'cashier@local.test', passwordHash: bcrypt.hashSync('correct-password', 4), role: 'CASHIER', isActive: true, sessionVersion: 0 }
@@ -29,7 +29,7 @@ function fixture() {
       return safe;
     }
   } };
-  const app = createApp(db, { jwtSecret: secret, webOrigin: 'http://localhost:3000', production: false, sameSite: 'lax' });
+  const app = createApp(db, { jwtSecret: secret, webOrigin: 'http://localhost:3000', production: false, sameSite: 'lax', ...config });
   const agent = request.agent(app);
   async function csrf() { return (await agent.get('/api/auth/csrf')).body.csrfToken; }
   async function login(email = 'admin@local.test', password = 'correct-password') {
@@ -49,11 +49,34 @@ describe('authentication and user authorization', () => {
     expect((await agent.get('/api/auth/me')).body.user.role).toBe('ADMIN');
   });
 
+  it('marks production session and CSRF cookies Secure with configured SameSite', async () => {
+    const { app } = fixture({ production: true, sameSite: 'none', webOrigin: 'https://store.example' });
+    const csrfResponse = await request(app).get('/api/auth/csrf');
+    const csrfCookie = csrfResponse.headers['set-cookie'][0];
+    expect(csrfCookie).toMatch(/Secure/i);
+    expect(csrfCookie).toMatch(/SameSite=None/i);
+    expect(csrfCookie).not.toMatch(/HttpOnly/i);
+    const signedIn = await request(app).post('/api/auth/login').set('Cookie', csrfCookie.split(';')[0])
+      .set('x-csrf-token', csrfResponse.body.csrfToken).send({ email: 'admin@local.test', password: 'correct-password' });
+    expect(signedIn.status).toBe(200);
+    const sessionCookie = signedIn.headers['set-cookie'].find((cookie) => cookie.startsWith('stockly_session='));
+    expect(sessionCookie).toMatch(/Secure/i);
+    expect(sessionCookie).toMatch(/HttpOnly/i);
+    expect(sessionCookie).toMatch(/SameSite=None/i);
+  });
+
   it('rejects invalid credentials and disabled users', async () => {
     const { users, login } = fixture();
     expect((await login('admin@local.test', 'wrong-password')).status).toBe(401);
     users[0].isActive = false;
     expect((await login()).status).toBe(401);
+  });
+
+  it('does not spend the failed-login allowance on successful sign-ins', async () => {
+    const { login } = fixture();
+    for (let index = 0; index < 11; index += 1) expect((await login()).status).toBe(200);
+    for (let index = 0; index < 10; index += 1) expect((await login('admin@local.test', 'wrong-password')).status).toBe(401);
+    expect((await login('admin@local.test', 'wrong-password')).status).toBe(429);
   });
 
   it('rejects unauthenticated requests and mutations without CSRF', async () => {
