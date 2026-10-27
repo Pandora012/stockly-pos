@@ -71,6 +71,9 @@ integration('catalog and stock controls against PostgreSQL', async () => {
     expect(nextPage.body.items).toHaveLength(1);
     expect(nextPage.body.items[0].id).not.toBe(found.body.items[0].id);
     expect((await admin.get('/api/products').query({ q: barcode })).body.total).toBe(1);
+    expect((await cashier.get('/api/products').query({ barcode, pageSize: 1 })).body.items[0].id).toBe(productId);
+    expect((await cashier.get('/api/products').query({ barcode: `${barcode}0` })).body.total).toBe(0);
+    expect((await cashier.get('/api/products').query({ barcode: 'invalid' })).status).toBe(400);
     expect((await admin.get('/api/products').query({ categoryId, lowStock: true })).body.total).toBe(1);
     expect((await cashier.get(`/api/products/${productId}`)).status).toBe(200);
 
@@ -110,6 +113,8 @@ integration('catalog and stock controls against PostgreSQL', async () => {
     const deactivated = await mutate(admin, 'patch', `/api/products/${productId}`, { isActive: false });
     expect(deactivated.status).toBe(200);
     expect((await cashier.get(`/api/products/${productId}`)).status).toBe(404);
+    expect((await cashier.get('/api/products').query({ barcode })).body.total).toBe(0);
+    expect((await admin.get('/api/products').query({ barcode, isActive: 'false' })).body.total).toBe(1);
     expect((await cashier.get('/api/products').query({ q: `TEST-${suffix}` })).body.total).toBe(1);
     expect((await admin.get('/api/products').query({ categoryId, isActive: 'false' })).body.total).toBe(1);
     expect((await mutate(admin, 'patch', `/api/categories/${categoryId}`, { isActive: false })).status).toBe(200);

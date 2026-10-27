@@ -28,7 +28,7 @@ const adjustmentInput = z.object({
 }).strict();
 const pageInput = { page: z.coerce.number().int().min(1).max(100_000).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20) };
-const productQuery = z.object({ ...pageInput, q: z.string().trim().max(160).optional(), categoryId: id.optional(),
+const productQuery = z.object({ ...pageInput, q: z.string().trim().max(160).optional(), barcode: z.string().regex(/^[0-9]{1,64}$/).optional(), categoryId: id.optional(),
   isActive: z.enum(['true', 'false']).optional(), lowStock: z.enum(['true', 'false']).optional() }).strict();
 const movementQuery = z.object({ ...pageInput, productId: id.optional(),
   from: z.string().date().optional(), to: z.string().date().optional() }).strict().refine(
@@ -55,6 +55,7 @@ async function requireCategory(db, categoryId) {
 
 function stockWhere(db, query, admin) {
   const where = {};
+  if (query.barcode) where.barcode = query.barcode;
   if (query.q) where.OR = [
     { name: { contains: query.q, mode: 'insensitive' } },
     { sku: { contains: query.q, mode: 'insensitive' } },

@@ -1,17 +1,29 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { LayoutDashboard, Users, LogOut, Boxes, FolderTree, Warehouse, ShoppingCart, ReceiptText, ChartNoAxesCombined, Truck, ClipboardList } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from '../../components/auth-provider';
 import { Access } from '../../components/access';
 
 function Shell({ children }) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [logoutError, setLogoutError] = useState('');
+  useEffect(() => {
+    function onShortcut(event) {
+      if (event.key !== 'F8' || event.repeat || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
+          pathname.startsWith('/transactions') || document.querySelector('dialog[open]')) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select, [contenteditable="true"]'))) return;
+      event.preventDefault(); router.push('/transactions');
+    }
+    window.addEventListener('keydown', onShortcut);
+    return () => window.removeEventListener('keydown', onShortcut);
+  }, [pathname, router]);
   async function handleLogout() {
     setLogoutError('');
     try { await logout(); } catch { setLogoutError('Gagal keluar. Coba lagi.'); }

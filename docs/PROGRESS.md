@@ -40,16 +40,16 @@ Statuses: `in progress`, `not started`, `complete` (use complete only after that
 ## Phase 5 — Supplier management and purchase orders
 - **Status:** complete
 - **Completed:** Supplier and PO/item models/migration; admin supplier search/details/deactivation and history; version-guarded drafts and ordering; full-order serializable/idempotent receiving; supplier, purchase list/builder/detail UI with stock references.
-- **Remaining:** None for Phase 5. Phase 6 not started; requires explicit authorization.
+- **Remaining:** None for Phase 5.
 - **Verification:** `npm run db:migrate` applied `20261030000000_suppliers_restocking` and generated Prisma Client; `npx prisma migrate status` confirms five migrations up to date. Latest `npm test` passed 33/33, including nine real-PostgreSQL purchase tests for validation, roles, versions, snapshots, rollback, overflow, duplicate/concurrent receiving and concurrent different-PO stock increments. `npm run lint` and `npm run build` passed. Full Playwright regression passed 7/7, including two purchase scenarios for supplier CRUD, multi-product drafts, ordering/receiving, stock references, 390px layout, dropped-response retry and cashier denial. Desktop/mobile screenshots reviewed, including regenerated mobile movement rows. Details: `docs/PHASE5_VERIFICATION.md`.
 - **Known blockers:** None. Draft creation has no idempotency key; inspect history after an uncertain save. Prisma 6 seed-config deprecation remains non-blocking. Git has no commits; project files remain untracked, with `.env` and generated artifacts ignored.
 
 ## Phase 6 — Barcode scanner and keyboard shortcuts
-- **Status:** not started
-- **Completed:** None.
-- **Remaining:** All phase work.
-- **Verification:** Not run.
-- **Known blockers:** None known.
+- **Status:** complete
+- **Completed:** Exact barcode filter on existing product list endpoint, preserving cashier visibility; Enter-based keyboard-emulation scanner lookup with serialized scans, quantity increments, stock limits, unknown/inactive/out-of-stock feedback and checkout lock while lookup is pending. POS-only F2 search focus and F4 checkout; app-level F8 transactions; form/dialog guards, modifier/repeat guards and listener cleanup. F6/F7 shown as reserved and left inactive. Cart stock display and editable quantity handling improved; payment dialog focuses cash input and then receipt link, with focus restored to search on close. No camera scanning or Phase 7 cart-hold behavior.
+- **Remaining:** None for Phase 6. Phase 7 not started; requires explicit authorization.
+- **Verification:** Focused PostgreSQL catalog test passed, including exact barcode and cashier/inactive visibility. Focused Playwright scanner/shortcut scenario passed, covering rapid/repeated scans, stock cap, errors, shortcut contexts and listener counts across navigation. Full `npm test` 33/33, `npm run lint`, production `npm run build`, and full Playwright regression 8/8 passed. See `docs/PHASE6_VERIFICATION.md`.
+- **Known blockers:** None. Cashier sees the same non-disclosing message for an unknown barcode and an inactive product. Existing non-blocking Prisma 6 config warning remains.
 
 ## Phase 7 — Hold and resume cart
 - **Status:** not started

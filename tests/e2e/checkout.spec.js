@@ -63,6 +63,7 @@ test('cashier flow saves stock, payment, receipt, history and printable layout',
   await expect(dialog).not.toBeVisible();
   await page.getByRole('button', { name: 'Bayar tunai' }).click();
   await dialog.getByRole('button', { name: 'Batal', exact: true }).click();
+  await expect(page.getByLabel('Cari nama, SKU, atau pindai barcode')).toBeFocused();
   await page.getByRole('button', { name: 'Bayar tunai' }).click();
   await dialog.getByRole('button', { name: 'Uang pas', exact: true }).click();
   await dialog.getByLabel('Uang tunai diterima').fill('50000');
@@ -122,9 +123,9 @@ test('lost checkout response can be retried after reload without a duplicate sal
 
 test('changed prices require cart refresh; invalid discounts and empty searches have honest states', async ({ page }) => {
   await login(page);
-  await page.getByLabel('Cari nama atau SKU').fill('nonexistent-unique-product');
+  await page.getByLabel('Cari nama, SKU, atau pindai barcode').fill('nonexistent-unique-product');
   await expect(page.getByText('Belum ada data untuk filter ini.')).toBeVisible();
-  await page.getByLabel('Cari nama atau SKU').fill(products[0].sku);
+  await page.getByLabel('Cari nama, SKU, atau pindai barcode').fill(products[0].sku);
   await page.getByRole('button', { name: 'Tambah E2E product 1', exact: true }).click();
   await page.getByLabel('Diskon (IDR)').fill('999999');
   await expect(page.getByRole('alert').filter({ hasText: 'diskon melebihi subtotal' })).toBeVisible();
@@ -140,4 +141,76 @@ test('changed prices require cart refresh; invalid discounts and empty searches 
   await page.getByRole('button', { name: 'Bayar tunai' }).click();
   await page.getByRole('button', { name: 'Konfirmasi pembayaran' }).click();
   await expect(page.getByRole('heading', { name: 'Pembayaran tersimpan' })).toBeVisible();
+});
+
+test('scanner Enter and POS shortcuts remain safe across rapid input and navigation', async ({ page }) => {
+  await page.addInitScript(() => {
+    const listeners = new Set();
+    const add = window.addEventListener.bind(window);
+    const remove = window.removeEventListener.bind(window);
+    window.__posShortcutListeners = () => [...listeners].filter((listener) => listener.name === 'shortcuts').length;
+    window.addEventListener = (type, listener, options) => {
+      if (type === 'keydown' && listener?.name === 'shortcuts') listeners.add(listener);
+      return add(type, listener, options);
+    };
+    window.removeEventListener = (type, listener, options) => {
+      if (type === 'keydown') listeners.delete(listener);
+      return remove(type, listener, options);
+    };
+  });
+  const barcode = '00123456789012';
+  const emptyBarcode = '00987654321098';
+  const inactiveBarcode = '00888888888888';
+  await db.product.update({ where: { id: products[0].id }, data: { barcode } });
+  await db.product.update({ where: { id: products[1].id }, data: { barcode: emptyBarcode, stock: 0 } });
+  const inactive = await db.product.create({ data: { name: 'Inactive scan fixture', sku: `INACTIVE-${crypto.randomUUID()}`,
+    barcode: inactiveBarcode, categoryId: category.id, purchasePrice: 1000, sellingPrice: 2000, stock: 4, isActive: false } });
+  products.push(inactive);
+  await login(page);
+  expect(await page.evaluate(() => window.__posShortcutListeners())).toBe(1);
+  const search = page.getByLabel('Cari nama, SKU, atau pindai barcode');
+  await page.locator('body').click({ position: { x: 10, y: 10 } });
+  await page.keyboard.press('F2'); await expect(search).toBeFocused();
+  await search.fill(barcode); await search.press('Enter');
+  await expect(page.getByLabel(`Jumlah ${products[0].name}`, { exact: true })).toHaveValue('1');
+  await expect(page.getByRole('status').filter({ hasText: 'stok tersedia 10' })).toBeVisible();
+  await search.press('Enter');
+  await expect(page.getByLabel(`Jumlah ${products[0].name}`, { exact: true })).toHaveValue('1');
+  await search.fill(barcode); await search.press('Enter');
+  await search.fill(barcode); await search.press('Enter');
+  await expect(page.getByLabel(`Jumlah ${products[0].name}`, { exact: true })).toHaveValue('3');
+  await page.getByLabel(`Jumlah ${products[0].name}`, { exact: true }).fill('10');
+  await expect(page.getByLabel(`Jumlah ${products[0].name}`, { exact: true })).toHaveValue('10');
+  await search.fill(barcode); await search.press('Enter');
+  await expect(page.getByRole('status').filter({ hasText: 'Jumlah melebihi stok' })).toBeVisible();
+  await page.getByLabel(`Jumlah ${products[0].name}`, { exact: true }).fill('3');
+  await search.fill('00000000000000'); await search.press('Enter');
+  await expect(page.getByRole('status').filter({ hasText: 'tidak ditemukan atau produk tidak aktif' })).toBeVisible();
+  await search.fill(inactiveBarcode); await search.press('Enter');
+  await expect(page.getByRole('status').filter({ hasText: 'tidak ditemukan atau produk tidak aktif' })).toBeVisible();
+  await search.fill(emptyBarcode); await search.press('Enter');
+  await expect(page.getByRole('status').filter({ hasText: 'habis. Stok tersedia: 0' })).toBeVisible();
+  await expect(page.getByLabel(`Jumlah ${products[0].name}`, { exact: true })).toHaveValue('3');
+  await search.fill('nama produk'); await page.keyboard.press('F4');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(search).toHaveValue('nama produk');
+  await search.fill(''); await page.getByLabel('Diskon (IDR)').focus();
+  await page.keyboard.press('F2'); await expect(page.getByLabel('Diskon (IDR)')).toBeFocused();
+  await page.keyboard.press('F8'); await expect(page).toHaveURL(/\/pos$/);
+  await page.locator('body').click({ position: { x: 10, y: 10 } });
+  await page.keyboard.press('F6'); await page.keyboard.press('F7'); await expect(page).toHaveURL(/\/pos$/);
+  await page.keyboard.press('Control+F4'); await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.keyboard.press('F4');
+  const dialog = page.getByRole('dialog'); await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel('Uang tunai diterima')).toBeFocused();
+  await page.keyboard.press('F8'); await expect(page).toHaveURL(/\/pos$/);
+  await page.keyboard.press('Escape'); await expect(dialog).not.toBeVisible(); await expect(search).toBeFocused();
+  await page.locator('body').click({ position: { x: 10, y: 10 } });
+  await page.keyboard.press('F8'); await expect(page).toHaveURL(/\/transactions$/);
+  expect(await page.evaluate(() => window.__posShortcutListeners())).toBe(0);
+  await page.getByRole('link', { name: 'Kasir', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Tambah E2E product 1', exact: true })).toBeEnabled();
+  expect(await page.evaluate(() => window.__posShortcutListeners())).toBe(1);
+  await page.keyboard.press('F2'); await expect(page.getByLabel('Cari nama, SKU, atau pindai barcode')).toBeFocused();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });

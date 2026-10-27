@@ -4,7 +4,7 @@ Professional web-based point-of-sale and inventory management for a single physi
 
 ## Project status
 
-**Phase 5 complete: suppliers, purchase orders and atomic restocking.** See [`docs/PROGRESS.md`](docs/PROGRESS.md) for verification/status and [`docs/HANDOFF.md`](docs/HANDOFF.md) for continuation. Phase 6 has not started.
+**Phase 6 complete: USB barcode scanning and keyboard shortcuts.** See [`docs/PROGRESS.md`](docs/PROGRESS.md) for verification/status and [`docs/HANDOFF.md`](docs/HANDOFF.md) for continuation. Phase 7 has not started.
 
 ## Project references
 
@@ -36,6 +36,8 @@ Development seed inserts five categories and 18 **fictional demo products** with
 - Open `/pos` after login. Choose products, adjust quantities/IDR discount, check totals, then receive cash. Backend recalculates prices, tax, stock and change; stale totals require explicit cart refresh before payment.
 - Open `/transactions` to view history and print/reprint the 80mm receipt. Cashiers see only their own transactions; admins see the store history. Date filters use UTC days.
 - If checkout loses its connection, use **Periksa pembayaran tertunda** to retry the saved request. Do not start another sale or clear the pending request until the previous outcome is known. Pending checkout recovery survives a reload in the same browser tab, but is not a held-cart feature.
+- USB barcode scanners in keyboard mode: focus the POS search, scan a numeric barcode, then Enter adds the active product. Repeated scans increase its quantity up to available stock. Unknown or inactive codes are reported without revealing inactive catalog entries; zero-stock products cannot be added. Camera scanning is not included.
+- POS shortcuts: **F2** search, **F4** checkout when the cart is valid, **F8** transactions from the application outside form fields/dialogs. **Escape** closes checkout or clears search/cancels a quantity edit. **F6/F7** are reserved for Phase 7 and currently do nothing. Shortcuts do not override typing or modified browser key combinations. See [`docs/PHASE6_VERIFICATION.md`](docs/PHASE6_VERIFICATION.md).
 - Critical browser tests: `npx playwright install chromium`, then `npm run test:e2e`. Uses local PostgreSQL and dedicated ports 3100/4100; test fixtures are cleaned up. Do not run these tests on production. See [`docs/PHASE3_VERIFICATION.md`](docs/PHASE3_VERIFICATION.md).
 
 ## Admin reporting
