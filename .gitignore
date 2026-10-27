@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Next.js and build output
+.next/
+.next-e2e/
+out/
+dist/
+build/
+
+# Test and coverage output
+coverage/
+playwright-report/
+test-results/
+
+# Local logs and caches
+*.log
+.npm/
+.cache/
+
+# Local editor / operating-system files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

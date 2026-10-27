@@ -1,0 +1,242 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  CASHIER
+}
+
+model User {
+  id             String   @id @default(uuid()) @db.Uuid
+  name           String   @db.VarChar(120)
+  email          String   @unique @db.VarChar(255)
+  passwordHash   String   @db.VarChar(255)
+  role           Role     @default(CASHIER)
+  isActive       Boolean  @default(true)
+  sessionVersion Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  movements      StockMovement[]
+  adjustments    StockAdjustment[]
+  sales          Sale[]
+  purchaseOrders PurchaseOrder[] @relation("PurchaseCreator")
+  receivedOrders PurchaseOrder[] @relation("PurchaseReceiver")
+}
+
+model StoreSetting {
+  id             Int      @id @default(1)
+  storeName      String   @db.VarChar(160)
+  address        String   @default("") @db.VarChar(500)
+  phone          String   @default("") @db.VarChar(30)
+  receiptFooter  String   @default("") @db.VarChar(500)
+  currency       String   @default("IDR") @db.VarChar(3)
+  defaultTaxRate Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+enum MovementType {
+  INITIAL
+  IN
+  OUT
+  ADJUSTMENT
+  SALE
+}
+
+model Category {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String    @db.VarChar(120)
+  slug      String    @unique @db.VarChar(120)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+
+  @@index([isActive, name])
+}
+
+model Product {
+  id            String            @id @default(uuid()) @db.Uuid
+  categoryId    String            @db.Uuid
+  category      Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  name          String            @db.VarChar(160)
+  sku           String            @unique @db.VarChar(64)
+  barcode       String?           @unique @db.VarChar(64)
+  description   String            @default("") @db.VarChar(1000)
+  purchasePrice Int
+  sellingPrice  Int
+  stock         Int               @default(0)
+  minimumStock  Int               @default(0)
+  imageUrl      String?           @db.VarChar(500)
+  isActive      Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  movements     StockMovement[]
+  adjustments   StockAdjustment[]
+  saleItems     SaleItem[]
+  purchaseItems PurchaseOrderItem[]
+
+  @@index([categoryId, isActive])
+  @@index([isActive, stock])
+  @@index([name])
+}
+
+model StockMovement {
+  id             String       @id @default(uuid()) @db.Uuid
+  productId      String       @db.Uuid
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  userId         String       @db.Uuid
+  user           User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  type           MovementType
+  quantityChange Int
+  stockBefore    Int
+  stockAfter     Int
+  referenceType  String?      @db.VarChar(40)
+  referenceId    String?      @db.VarChar(100)
+  note           String?      @db.VarChar(500)
+  createdAt      DateTime     @default(now())
+
+  @@index([productId, createdAt])
+  @@index([createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model StockAdjustment {
+  id             String   @id @default(uuid()) @db.Uuid
+  productId      String   @db.Uuid
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  userId         String   @db.Uuid
+  user           User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  quantityChange Int
+  reason         String   @db.VarChar(500)
+  createdAt      DateTime @default(now())
+
+  @@index([productId, createdAt])
+}
+
+enum SaleStatus {
+  COMPLETED
+}
+
+enum PaymentMethod {
+  CASH
+}
+
+model Sale {
+  id                  String     @id @default(uuid()) @db.Uuid
+  invoiceNumber       String     @unique @db.VarChar(64)
+  cashierId           String     @db.Uuid
+  cashier             User       @relation(fields: [cashierId], references: [id], onDelete: Restrict)
+  cashierNameSnapshot String     @db.VarChar(120)
+  subtotal            Int
+  discount            Int        @default(0)
+  tax                 Int        @default(0)
+  taxRate             Int        @default(0)
+  total               Int
+  status              SaleStatus @default(COMPLETED)
+  createdAt           DateTime   @default(now())
+  idempotencyKey      String     @unique @db.Uuid
+  requestHash         String     @db.VarChar(64)
+  storeSnapshot       Json
+  items               SaleItem[]
+  payment             Payment?
+
+  @@index([cashierId, createdAt])
+  @@index([createdAt])
+}
+
+model SaleItem {
+  id                  String  @id @default(uuid()) @db.Uuid
+  saleId              String  @db.Uuid
+  sale                Sale    @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  productId           String  @db.Uuid
+  product             Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productNameSnapshot String  @db.VarChar(160)
+  skuSnapshot         String  @db.VarChar(64)
+  categoryIdSnapshot  String  @db.Uuid
+  categoryNameSnapshot String @db.VarChar(120)
+  quantity            Int
+  unitPrice           Int
+  unitCostSnapshot    Int
+  lineTotal           Int
+
+  @@unique([saleId, productId])
+  @@index([productId])
+}
+
+model Payment {
+  id             String        @id @default(uuid()) @db.Uuid
+  saleId         String        @unique @db.Uuid
+  sale           Sale          @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  method         PaymentMethod @default(CASH)
+  amountReceived Int
+  changeAmount   Int
+  createdAt      DateTime      @default(now())
+}
+
+enum PurchaseStatus {
+  DRAFT
+  ORDERED
+  RECEIVED
+}
+
+model Supplier {
+  id            String          @id @default(uuid()) @db.Uuid
+  name          String          @db.VarChar(160)
+  contactPerson String          @default("") @db.VarChar(120)
+  phone         String          @default("") @db.VarChar(30)
+  email         String          @default("") @db.VarChar(255)
+  address       String          @default("") @db.VarChar(500)
+  notes         String          @default("") @db.VarChar(1000)
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  purchases     PurchaseOrder[]
+
+  @@index([isActive, name])
+}
+
+model PurchaseOrder {
+  id                   String              @id @default(uuid()) @db.Uuid
+  poNumber             String              @unique @db.VarChar(64)
+  supplierId           String              @db.Uuid
+  supplier             Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  supplierNameSnapshot String              @db.VarChar(160)
+  createdById          String              @db.Uuid
+  createdBy            User                @relation("PurchaseCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  receivedById         String?             @db.Uuid
+  receivedBy           User?               @relation("PurchaseReceiver", fields: [receivedById], references: [id], onDelete: Restrict)
+  status               PurchaseStatus      @default(DRAFT)
+  version              Int                 @default(0)
+  totalAmount          Int
+  orderedAt            DateTime?
+  receivedAt           DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  items                PurchaseOrderItem[]
+
+  @@index([supplierId, createdAt])
+  @@index([status, createdAt])
+}
+
+model PurchaseOrderItem {
+  id                  String        @id @default(uuid()) @db.Uuid
+  purchaseOrderId     String        @db.Uuid
+  purchaseOrder       PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  productId           String        @db.Uuid
+  product             Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productNameSnapshot String        @db.VarChar(160)
+  skuSnapshot         String        @db.VarChar(64)
+  quantity            Int
+  unitCost            Int
+  lineTotal           Int
+
+  @@unique([purchaseOrderId, productId])
+  @@index([productId])
+}

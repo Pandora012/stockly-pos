@@ -1,0 +1,73 @@
+# Project Progress
+
+Statuses: `in progress`, `not started`, `complete` (use complete only after that phase's acceptance criteria are met).
+
+## Phase 0 — OpenCode setup and documentation
+- **Status:** complete
+- **Completed:** Created requested project instructions, minimal OpenCode config, specification, progress, decisions, handoff, README, and `.gitignore`; reviewed consistency against the Phase 0 scope.
+- **Remaining:** None for Phase 0.
+- **Verification:** Parsed `opencode.json` as JSON and confirmed all eight requested files exist. No application tests applicable; no dependencies installed.
+- **Known blockers:** None. Git repository initialized on `main` during Phase 1; no commits yet.
+
+## Phase 1 — Foundation, PostgreSQL, and authentication
+- **Status:** complete
+- **Completed:** npm workspaces and development scripts; Compose as optional PostgreSQL setup; `.env.example`; PostgreSQL Prisma migration and idempotent seed; Express JWT cookie authentication, CSRF, validation, rate limits and admin cashier APIs; Next.js login, guarded dashboard, user management and UI states; mock and PostgreSQL integration tests; local Git initialized on `main` without a commit.
+- **Remaining:** None for Phase 1.
+- **Verification:** `npm run db:migrate` applied the initial migration; latest `npx prisma migrate status` is up to date. `npm run db:seed` created admin and IDR settings; a second run preserved existing credentials. Seeded admin login, `/api/auth/me`, `/api/users`, logout, and revoked-cookie rejection passed against PostgreSQL. Latest `npm test` passed 9/9 (8 mock, 1 PostgreSQL); `npm run lint` and `npm run build` passed. Earlier browser click-through with temporary admin/cashier verified login, user creation/edit/activation, logout, cashier dashboard, and unauthorized route; test accounts were removed. `git check-ignore` confirms `.env`, `node_modules`, and `.next` are ignored.
+- **Known blockers:** None for Phase 1. Git has no commits; files are untracked until developer commits. Prisma 6 reports a non-blocking deprecation warning for `package.json#prisma` seed configuration.
+
+## Phase 2 — Product, category, and inventory management
+- **Status:** complete
+- **Completed:** Prisma category/product/stock movement/adjustment models, relationships, indexes and SQL constraints; migration applied; validated Express category/product/inventory endpoints with admin-only mutation and cashier-safe reads; atomic initial stock and stock adjustments; search, filters, pagination; `/products`, `/categories`, `/inventory` tables/forms/history and stock dialog; five demo categories, 18 clearly labeled fictional products and their initial movements.
+- **Remaining:** None for Phase 2. Do not start Phase 3 without authorization.
+- **Verification:** `npm run db:migrate` applied `20261027000000_catalog_inventory`; `npm run db:generate` passed after stopping old API watch processes; `npx prisma migrate status` up to date. `npm run db:seed` created 18 products, second run created 0. Latest `npm test` passed 10/10 (8 mock auth, 2 PostgreSQL integration), including duplicate SKU/barcode, negative price, cashier denial, search/pagination, atomic stock and concurrent decrement safety. `npm run lint` and `npm run build` passed. Browser exercised login, create/edit category, create/edit/search product, low-stock display, failed and successful adjustment, filtered movement history and logout; temporary records were deleted. No screenshot/mobile viewport capture was available in this browser environment.
+- **Known blockers:** None for Phase 2. Prisma 6 warns about deprecated `package.json#prisma` config. Git still has no commits and all project files remain untracked; `.env` is ignored.
+
+## Phase 3 — Cashier, checkout, transaction history, and receipts
+- **Status:** complete
+- **Completed:** Sale/item/payment schema and applied PostgreSQL migration; server-recalculated cash checkout, snapshots, transactional stock movements and request idempotency; POS, payment dialog, history and 80mm receipt UI; PostgreSQL integration tests and Playwright critical-flow tests.
+- **Remaining:** None for Phase 3.
+- **Verification:** `npm run db:migrate` applied `20261028000000_cash_sales` and generated Prisma Client; `npx prisma migrate status` confirms three applied migrations. Latest `npm test` passed 17/17, including PostgreSQL rollback/concurrent last-unit checkout/same-key retry, snapshots and receipt totals. `npm run lint` and production `npm run build` passed. Three Playwright E2E passed for full login/cart/cash payment/stock/receipt/history/print flow, lost-response recovery after reload, and price-change/error states. Desktop/mobile screenshots reviewed; print-media CSS and `window.print` invocation checked (no physical printer). Details: `docs/PHASE3_VERIFICATION.md`.
+- **Known blockers:** None. Prisma 6 seed-config deprecation remains non-blocking. Git has no commits, all project files remain untracked; `.env` and test/build artifacts are ignored.
+
+## Phase 4 — Dashboard, sales analytics, and Excel export
+- **Status:** complete
+- **Completed:** Admin-only PostgreSQL report endpoints, Jakarta date boundaries, aggregate/profit queries, snapshot categories, four-sheet ExcelJS export with limits; real dashboard, report filters/tables/charts and download UI.
+- **Remaining:** None for Phase 4.
+- **Verification:** `npm run db:migrate` applied `20261029000000_reporting_categories` and generated Prisma Client; migrate status reports four migrations up to date. Latest `npm test` passed 24/24 (seven new real PostgreSQL report/export tests), `npm run lint` and `npm run build` passed. Five Playwright E2E passed including prior checkout regression, real admin overview, daily/monthly filters, valid downloaded XLSX, empty/error/retry states, 390px report layout and cashier denial. Screenshots reviewed. Details: `docs/PHASE4_VERIFICATION.md`.
+- **Known blockers:** None. Pre-Phase-4 category snapshots are backfilled from current catalog at migration time, not historical categories that were never recorded. Prisma 6 seed-config deprecation remains non-blocking. Git has no commits; project files untracked and `.env`/artifacts ignored.
+
+## Phase 5 — Supplier management and purchase orders
+- **Status:** complete
+- **Completed:** Supplier and PO/item models/migration; admin supplier search/details/deactivation and history; version-guarded drafts and ordering; full-order serializable/idempotent receiving; supplier, purchase list/builder/detail UI with stock references.
+- **Remaining:** None for Phase 5. Phase 6 not started; requires explicit authorization.
+- **Verification:** `npm run db:migrate` applied `20261030000000_suppliers_restocking` and generated Prisma Client; `npx prisma migrate status` confirms five migrations up to date. Latest `npm test` passed 33/33, including nine real-PostgreSQL purchase tests for validation, roles, versions, snapshots, rollback, overflow, duplicate/concurrent receiving and concurrent different-PO stock increments. `npm run lint` and `npm run build` passed. Full Playwright regression passed 7/7, including two purchase scenarios for supplier CRUD, multi-product drafts, ordering/receiving, stock references, 390px layout, dropped-response retry and cashier denial. Desktop/mobile screenshots reviewed, including regenerated mobile movement rows. Details: `docs/PHASE5_VERIFICATION.md`.
+- **Known blockers:** None. Draft creation has no idempotency key; inspect history after an uncertain save. Prisma 6 seed-config deprecation remains non-blocking. Git has no commits; project files remain untracked, with `.env` and generated artifacts ignored.
+
+## Phase 6 — Barcode scanner and keyboard shortcuts
+- **Status:** not started
+- **Completed:** None.
+- **Remaining:** All phase work.
+- **Verification:** Not run.
+- **Known blockers:** None known.
+
+## Phase 7 — Hold and resume cart
+- **Status:** not started
+- **Completed:** None.
+- **Remaining:** All phase work.
+- **Verification:** Not run.
+- **Known blockers:** None known.
+
+## Phase 8 — Security audit, testing, and UI refinement
+- **Status:** not started
+- **Completed:** None.
+- **Remaining:** All phase work.
+- **Verification:** Not run.
+- **Known blockers:** None known.
+
+## Phase 9 — Deployment and portfolio documentation
+- **Status:** not started
+- **Completed:** None.
+- **Remaining:** All phase work.
+- **Verification:** Not run.
+- **Known blockers:** None known.
