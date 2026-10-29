@@ -7,12 +7,14 @@ Build a professional, practical web-based POS and inventory system for one physi
 ## Users and features
 
 ### ADMIN
+
 - Manage products, categories, inventory, and stock adjustments.
 - Manage suppliers, purchase orders, and cashier accounts.
 - View all transactions, sales analytics, and reports; export reports to Excel.
 - Manage store settings.
 
 ### CASHIER
+
 - Search or scan products, manage a shopping cart, and complete cash checkout.
 - Hold and resume carts, print receipts, and view authorized transaction history.
 
@@ -26,7 +28,7 @@ Supplier workflow: supplier management → purchase order → receive goods → 
 - **Frontend:** Next.js App Router, JavaScript/JSX, Tailwind CSS, React Hook Form, Zod, Lucide React, Recharts.
 - **Backend:** Node.js, Express.js REST API, JavaScript ES modules, PostgreSQL, Prisma ORM, JWT, bcryptjs, Helmet, CORS, express-rate-limit.
 - **Additional:** ExcelJS, browser receipt printing, USB barcode scanner input, keyboard shortcuts, Vitest, Supertest, Playwright for critical E2E tests, Docker Compose, npm workspaces.
-- No TypeScript (`.ts`/`.tsx`), Supabase, Firebase, NextAuth, external authentication providers, SQLite, microservices, Redis, GraphQL, or payment gateways. Express remains the primary backend and PostgreSQL is mandatory.
+- Supabase, Firebase, NextAuth, external authentication providers, SQLite, microservices, Redis, GraphQL, or payment gateways. Express remains the primary backend and PostgreSQL is mandatory.
 
 ## Architecture
 
@@ -58,19 +60,6 @@ Use an npm-workspaces monorepo with a Next.js frontend and a separately run Expr
 - Prioritize usability, information clarity, consistency, responsive behavior, accessibility, then visual polish.
 - Avoid purple-blue gradients, glassmorphism, oversized rounded cards, generic AI dashboards, excessive shadows/animations, decorative glow, fake analytics, and unnecessary illustrations.
 - Cashier layout: product search/selection on the left; cart and checkout on the right. Support keyboard-friendly interaction and clearly show totals and stock.
-
-## Roadmap
-
-1. **Phase 0 — OpenCode setup and documentation:** instructions, project specification, configuration, progress, decisions, handoff.
-2. **Phase 1 — Foundation, PostgreSQL, and authentication.**
-3. **Phase 2 — Product, category, and inventory management.**
-4. **Phase 3 — Cashier, checkout, transaction history, and receipts.**
-5. **Phase 4 — Dashboard, sales analytics, and Excel export.**
-6. **Phase 5 — Supplier management and purchase orders.**
-7. **Phase 6 — Barcode scanner and keyboard shortcuts.**
-8. **Phase 7 — Hold and resume cart.**
-9. **Phase 8 — Security audit, testing, and UI refinement.**
-10. **Phase 9 — Local readiness and portfolio documentation.** Public deployment is deferred until separately authorized.
 
 Only the currently authorized phase may be implemented. Phase 0 must not implement application features or install dependencies.
 
