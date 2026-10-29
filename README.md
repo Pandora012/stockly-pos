@@ -101,6 +101,8 @@ All routes start with `/api`. `auth/csrf`, `auth/login`, `auth/me`, and `auth/lo
 
 Follow the [localhost demo walkthrough](docs/DEMO_GUIDE.md) from Admin dashboard through product/stock, supplier receiving, Cashier barcode/hold/checkout/receipt, then sales analytics and Excel. [Portfolio notes](docs/PORTFOLIO.md) summarize the engineering work.
 
+Want to study the implementation? The Indonesian guides explain files and code paths separately: [Frontend](docs/learning/FRONTEND.md) and [Backend](docs/learning/BACKEND.md).
+
 Key challenges include preventing last-unit overselling, preserving historical prices and costs, handling lost checkout/receiving responses without duplicate writes, and revalidating held carts without reserving stock. Limits: one store, cash only, no partial receiving or payment gateway, no camera scanner, browser printing requires an actual printer for physical verification, and initial hold/draft/adjustment creation lacks a retry identity. Reports use Asia/Jakarta days while transaction-history filters use UTC days. The in-memory rate limiter is not shared across replicas; local verification is not a penetration test or proof of production readiness. Future work, **only if separately authorized**, includes deployment hardening, load/accessibility testing, backup/restore, and scale-driven pagination/index changes.
 
 ### Troubleshooting

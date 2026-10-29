@@ -28,3 +28,9 @@ test-results/
 Thumbs.db
 .vscode/
 .idea/
+
+# Local documentation (keep specification, demo guide, and screenshots)
+/docs/*
+!/docs/PROJECT_SPEC.md
+!/docs/DEMO_GUIDE.md
+!/docs/screenshots/
